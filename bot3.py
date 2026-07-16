@@ -1,4 +1,4 @@
-/del import sqlite3
+import sqlite3
 import threading
 from flask import Flask
 from pyrogram import Client, filters
