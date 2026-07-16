@@ -7,7 +7,7 @@ from pyrogram.types import ReplyKeyboardMarkup, KeyboardButton
 # --- 1. الإعدادات والبيانات ---
 API_ID = 33844027
 API_HASH = "67f0b1f44e20beee3a94169998bfa00b"
-BOT_TOKEN = "8866205672:AAF98UCdTQMysf9i85xHDKaJ6ZBbJm1jiQ0"
+BOT_TOKEN = "8886784654:AAHzwFJkWgIJhFsWhpWgHJt-mwSzzbYiHeQ"
 
 # --- 2. خادم الويب (للحفاظ على البوت يعمل) ---
 app_web = Flask(__name__)
