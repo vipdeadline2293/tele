@@ -1,55 +1,60 @@
-import sqlite3
-import threading
+import os
+import asyncio
+from aiogram import Bot, Dispatcher, types, F
+from telethon import TelegramClient
+from telethon.sessions import StringSession
 from flask import Flask
-from pyrogram import Client, filters
-from tgcalls import GroupCallFactory
+from threading import Thread
 
-# --- الإعدادات ---
-API_ID = 33844027
-API_HASH = "67f0b1f44e20beee3a94169998bfa00b"
-BOT_TOKEN = "8886784654:AAHzwFJkWgIJhFsWhpWgHJt-mwSzzbYiHeQ"
+# الإعدادات الأساسية
+API_ID = int(os.environ.get("API_ID"))
+API_HASH = os.environ.get("API_HASH")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-# --- خادم الويب ---
-app_web = Flask(__name__)
-@app_web.route('/')
-def home(): return "Bot is alive!"
-threading.Thread(target=lambda: app_web.run(host="0.0.0.0", port=8080)).start()
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher()
+app = Flask(__name__)
 
-# --- قاعدة البيانات ---
-conn = sqlite3.connect("accounts.db", check_same_thread=False)
-cursor = conn.cursor()
-cursor.execute("CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, session_string TEXT)")
-conn.commit()
+# خادم ويب بسيط لإبقاء البوت قيد التشغيل على Render
+@app.route('/')
+def home():
+    return "Bot is running!"
 
-# --- إعداد البوت ---
-app = Client("manager_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+def run_web():
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 8080)))
 
-@app.on_message(filters.command("join_vc"))
-async def join_vc(client, message):
-    if len(message.command) < 2:
-        await message.reply("استخدم: /join_vc [رابط المجموعة]")
-        return
-    
-    chat_link = message.command[1]
-    accounts = cursor.execute("SELECT session_string FROM accounts").fetchall()
-    
-    if not accounts:
-        await message.reply("لا توجد حسابات!")
-        return
+# إدارة المهام
+active_clients = {}
 
-    for acc in accounts:
+async def sender_task(client, group, message, interval):
+    while True:
         try:
-            # استخدام Session String في Pyrogram
-            user = Client(f"session_{acc[0][:5]}", session_string=acc[0], api_id=API_ID, api_hash=API_HASH)
-            await user.start()
-            
-            # تهيئة tgcalls القديمة
-            factory = GroupCallFactory(user)
-            group_call = factory.get_group_call()
-            await group_call.join(chat_link)
-            
-            await message.reply(f"✅ تم الانضمام بالحساب {acc[0][:5]}...")
+            await client.send_message(group, message)
         except Exception as e:
-            await message.reply(f"❌ خطأ: {str(e)}")
+            print(f"Error: {e}")
+        await asyncio.sleep(interval * 60)
 
-app.run()
+@dp.message(F.text.startswith("/add"))
+async def add_account(message: types.Message):
+    # استخدام كود الجلسة (StringSession) المضاف في المتغيرات
+    # أو يمكنك تطويره ليطلب من المستخدم إدخال كود الجلسة عبر المحادثة
+    await message.reply("تم تفعيل النظام. الحسابات تعمل عبر الجلسات المخزنة.")
+
+@dp.message(F.text.startswith("/start"))
+async def start_spam(message: types.Message):
+    # مثال: /start group_username 5 message_text
+    args = message.text.split(maxsplit=3)
+    group, interval, text = args[1], int(args[2]), args[3]
+    
+    # هنا يتم استخدام الحساب الرئيسي أو الحسابات المضافة
+    client = TelegramClient(StringSession(os.environ.get("SESSION_STRING")), API_ID, API_HASH)
+    await client.start()
+    asyncio.create_task(sender_task(client, group, text, interval))
+    await message.reply("بدأت عملية النشر.")
+
+async def main():
+    Thread(target=run_web).start()
+    await dp.start_polling(bot)
+
+if __name__ == '__main__':
+    asyncio.run(main())
