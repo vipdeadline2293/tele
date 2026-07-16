@@ -1,3 +1,2 @@
 pyrogram
 flask
-pytgcalls @ git+https://github.com/pytgcalls/pytgcalls@master
