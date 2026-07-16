@@ -1,3 +1,2 @@
-pyrogram
-tgcalls
-flask
+telethon
+aiogram
