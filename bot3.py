@@ -1,57 +1,55 @@
-import os
-import asyncio
+import sqlite3
+import threading
+from flask import Flask
 from pyrogram import Client, filters
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from pytgcalls import PyTgCalls
+from tgcalls import GroupCallFactory
 
-# بياناتك (يجب وضعها هنا)
+# --- الإعدادات ---
 API_ID = 33844027
 API_HASH = "67f0b1f44e20beee3a94169998bfa00b"
-BOT_TOKEN = "8866205672:AAF98UCdTQMysf9i85xHDKaJ6ZBbJm1jiQ0"
+BOT_TOKEN = "8886784654:AAHzwFJkWgIJhFsWhpWgHJt-mwSzzbYiHeQ"
 
-app_bot = Client("my_controller_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
+# --- خادم الويب ---
+app_web = Flask(__name__)
+@app_web.route('/')
+def home(): return "Bot is alive!"
+threading.Thread(target=lambda: app_web.run(host="0.0.0.0", port=8080)).start()
 
-# قائمة الأزرار
-@app_bot.on_message(filters.command("start"))
-async def start(client, message):
-    buttons = InlineKeyboardMarkup([
-        [InlineKeyboardButton("📞 انضمام لاتصال", callback_data="join_call")],
-        [InlineKeyboardButton("🚪 خروج من الاتصال", callback_data="leave_call")]
-    ])
-    await message.reply("مرحباً! استخدم الأزرار للتحكم بالحسابات:", reply_markup=buttons)
+# --- قاعدة البيانات ---
+conn = sqlite3.connect("accounts.db", check_same_thread=False)
+cursor = conn.cursor()
+cursor.execute("CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, session_string TEXT)")
+conn.commit()
 
-# معالجة الضغط على الأزرار
-@app_bot.on_callback_query()
-async def callback_handler(client, query):
-    if query.data == "join_call":
-        await query.message.reply("أرسل رابط المكالمة أو الكروب الآن:")
-        # البوت ينتظر الرسالة القادمة من المستخدم
-        
-    elif query.data == "leave_call":
-        await query.message.reply("جاري الخروج من الاتصال في جميع الحسابات...")
-        # هنا يتم تنفيذ كود الخروج
+# --- إعداد البوت ---
+app = Client("manager_bot", api_id=API_ID, api_hash=API_HASH, bot_token=BOT_TOKEN)
 
-# دالة الانضمام (عندما ترسل الرابط)
-@app_bot.on_message(filters.text & ~filters.command("start"))
-async def handle_link(client, message):
-    link = message.text
-    sessions = [f.replace(".session", "") for f in os.listdir() if f.endswith(".session")]
+@app.on_message(filters.command("join_vc"))
+async def join_vc(client, message):
+    if len(message.command) < 2:
+        await message.reply("استخدم: /join_vc [رابط المجموعة]")
+        return
     
-    await message.reply(f"جاري الانضمام للرابط عبر {len(sessions)} حساباً...")
+    chat_link = message.command[1]
+    accounts = cursor.execute("SELECT session_string FROM accounts").fetchall()
     
-    for session_name in sessions:
-        if session_name == "my_controller_bot": continue
+    if not accounts:
+        await message.reply("لا توجد حسابات!")
+        return
+
+    for acc in accounts:
         try:
-            acc = Client(session_name, api_id=API_ID, api_hash=API_HASH)
-            await acc.start()
-            # الانضمام للمجموعة ثم الاتصال
-            await acc.join_chat(link)
-            # دمج PyTgCalls للانضمام للاتصال الفعلي
-            call = PyTgCalls(acc)
-            await call.start()
-            await call.join_group_call(link)
-            await message.reply(f"الحساب {session_name} انضم بنجاح!")
+            # استخدام Session String في Pyrogram
+            user = Client(f"session_{acc[0][:5]}", session_string=acc[0], api_id=API_ID, api_hash=API_HASH)
+            await user.start()
+            
+            # تهيئة tgcalls القديمة
+            factory = GroupCallFactory(user)
+            group_call = factory.get_group_call()
+            await group_call.join(chat_link)
+            
+            await message.reply(f"✅ تم الانضمام بالحساب {acc[0][:5]}...")
         except Exception as e:
-            await message.reply(f"فشل {session_name}: {e}")
+            await message.reply(f"❌ خطأ: {str(e)}")
 
-app_bot.run()
+app.run()
