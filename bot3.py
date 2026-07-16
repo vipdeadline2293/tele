@@ -1,4 +1,4 @@
-import sqlite3
+/del import sqlite3
 import threading
 from flask import Flask
 from pyrogram import Client, filters
@@ -73,14 +73,15 @@ async def join_vc(client, message):
     
     for acc in accounts:
         try:
-            user = Client("temp", session_string=acc[0], api_id=API_ID, api_hash=API_HASH)
+            # إنشاء عميل فريد لكل جلسة
+            user = Client(f"session_{acc[0][:10]}", session_string=acc[0], api_id=API_ID, api_hash=API_HASH)
             await user.start()
             vc = PyTgCalls(user)
             await vc.start()
             await vc.join_group_call(chat_link, Call())
             await user.stop()
         except Exception as e:
-            await message.reply(f"خطأ في الحساب: {e}")
+            await message.reply(f"خطأ في الحساب: {type(e).__name__}")
     
     await message.reply("✅ تمت المحاولة لجميع الحسابات.")
 
